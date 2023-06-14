@@ -1,0 +1,488 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+lane :ios_release do
+    ios_production()
+
+    text_to_messengers = get_text_to_messengers(platform:"App Store", start_rollout:0, final_rollout:1, release_notes: "поэтапно в течение 7 дней")
+    cmd = "export LC_CTYPE=en_US.UTF-8 \n echo \"#{text_to_messengers}\" | pbcopy" #copy message to clipboard on notification click
+    notification(message:text_to_messengers, execute: cmd)
+    puts "\n\n #{text_to_messengers} \n\n"
+end
+
+lane :android_halt do 
+    android_production_halt()
+    
+    text_to_messengers = get_text_to_messengers(platform:"Google Play", final_rollout:0, release_notes: options[:release_notes])
+    cmd = "export LC_CTYPE=en_US.UTF-8 \n echo \"#{text_to_messengers}\" | pbcopy" #copy message to clipboard on notification click
+    notification(message:text_to_messengers, execute: cmd)
+    puts "\n\n #{text_to_messengers} \n\n"
+end
+
+lane :android_update_rollout do |options|
+    rollout = options[:rollout]
+        
+    if not rollout
+        puts "🟥🐨🟥 Rollout not defined"
+        next
+    end
+    
+    android_production_rollout(rollout:rollout)
+        
+    if rollout == "1"
+        merge_release
+    end  
+
+    text_to_messengers = get_text_to_messengers(platform:"Google Play", final_rollout:rollout, release_notes: options[:release_notes])
+    cmd = "export LC_CTYPE=en_US.UTF-8 \n echo \"#{text_to_messengers}\" | pbcopy" #copy message to clipboard on notification click
+    notification(message:text_to_messengers, execute: cmd)
+    puts "\n\n #{text_to_messengers} \n\n"
+end
+
+lane :android_release do |options|
+    rollout = options[:rollout]
+    
+    if not rollout
+        puts "🟥🐨🟥 Rollout not defined"
+        next
+    end
+    
+    version = options[:version] || "minor"
+        
+    increment_version(version:version)
+    push_version
+    generate_changelog_android
+    android_production(rollout:rollout)
+    
+    text_to_messengers = get_text_to_messengers(platform:"Google Play", start_rollout:0, final_rollout:rollout, release_notes: options[:release_notes])
+    cmd = "export LC_CTYPE=en_US.UTF-8 \n echo \"#{text_to_messengers}\" | pbcopy" #copy message to clipboard on notification click
+    notification(message:text_to_messengers, execute: cmd)
+    puts "\n\n #{text_to_messengers} \n\n"
+end
+
+#---------- build name
+
+lane :get_build_name do
+    version = get_version
+    name = get_name
+    name = name.tr(".", "")
+    result = name + " " + version
+    result = result.tr(",.:\\-", " ")
+    result = result.squeeze(" ")
+    result = result.tr(" ", "_")
+    result = result.downcase
+    result
+end
+    
+lane :get_name do
+    project_settings = File.read("../ProjectSettings/ProjectSettings.asset")
+    pattern = /productName: *(.*)$/
+    founded = project_settings.match(pattern)
+    
+    if not founded
+        puts "🟥🐨🟥 Name not founded in ProjectSettings.asset"
+        next
+    end
+    
+    version = founded[1]
+    version
+end
+
+#---------- version
+
+lane :push_version do
+    version = get_version
+    git_commit(path: "./ProjectSettings/ProjectSettings.asset", message: "version #{version}")
+    push_to_git_remote
+end
+
+lane :get_version do 
+    project_settings = File.read("../ProjectSettings/ProjectSettings.asset")
+    pattern = /bundleVersion: *([0-9]+.[0-9]+.[0-9]+) */
+    founded = project_settings.match(pattern)
+    
+    if not founded
+        puts "🟥🐨🟥 Version not founded in ProjectSettings.asset"
+        next
+    end
+    
+    version = founded[1]
+    version
+end
+
+lane :get_version_code do
+    project_settings = File.read("../ProjectSettings/ProjectSettings.asset")
+    pattern = /AndroidBundleVersionCode: *([0-9]+) *$/
+    founded = project_settings.match(pattern)
+    
+    if not founded
+        puts "🟥🐨🟥 VersionCode not founded in ProjectSettings.asset"
+        next
+    end
+    
+    version = founded[1]
+    version
+end
+
+lane :set_version do |options|
+    version = options[:version]
+    
+    pattern = /^[0-9]+.[0-9]+.[0-9]+$/
+    
+    if not version.match pattern
+        if version != "increment_major" && version != "increment_minor" && version != "increment_patch"
+            puts "🟥🐨🟥 Wrong version format. Should be \"XX.XX.XX\" or increment_major, increment_minor or increment_patch."
+            next
+        end
+    end
+    
+    pre_build
+    unity(
+        unity_version: ENV["UNITY_VERSION"],
+        execute_method:"Build.SetVersion",
+        extra_args:"-custom_version #{version}"
+    )
+    post_build
+    puts "🟩🐨🟩 new version is " + get_version
+end
+
+lane :increment_version do |options|
+    version = options[:version]
+    
+    if version != "major" && version != "minor" && version != "patch"
+        puts "🟥🐨🟥 Wrong increment type. Should be major, minor or patch."
+        next
+    end
+    
+    set_version(version: "increment_" + version)
+end
+
+#---------- android
+
+lane :build_apk do
+	build_android(format:"apk")
+end
+
+lane :build_aab do
+	build_android(format:"aab")
+end
+  
+lane :build_android do |options|
+    pre_build
+    build_location = ENV["ANDROID_BUILD_LOCATION"]
+    build_name = get_build_name
+    build_format = options[:format]
+    full_path = ENV["ANDROID_BUILD_LOCATION"] + build_name + "." + build_format
+    begin
+        unity(
+            build_target:"Android",
+            unity_version: ENV["UNITY_VERSION"],
+            execute_method:"Build.Android",
+            extra_args:"-build_location #{build_location} -build_name #{build_name} -build_keystore_name #{ENV["ANDROID_BUILD_KEYSTORE_NAME"]} -build_keystore_password #{ENV["ANDROID_BUILD_KEYSTORE_PASSWORD"]} -build_keyalias_name #{ENV["ANDROID_BUILD_KEYALIAS_NAME"]} -build_keyalias_password #{ENV["ANDROID_BUILD_KEYALIAS_PASSWORD"]} -build_format #{build_format}"
+        )
+    rescue => ex
+        post_build
+    end
+    post_build
+    full_path
+end
+
+lane :android_internal do |option|
+    
+    rollout = option[:rollout] || "0.01"
+	aab_file_name = build_aab
+    generate_changelog_android
+    
+	upload_to_play_store(
+		aab: aab_file_name,
+		track:"internal",
+		rollout:rollout,
+		skip_upload_changelogs:false,
+		skip_upload_metadata:true,
+		skip_upload_images:true,
+		skip_upload_screenshots:true,
+	)
+end
+
+lane :android_production do |option|
+    rollout = option[:rollout] || "0.01"
+	aab_file_name = build_aab
+    upload_to_play_store(
+		aab: aab_file_name,
+		track:"production",
+		rollout:rollout,
+		skip_upload_changelogs:false,
+		skip_upload_metadata:true,
+		skip_upload_images:true,
+		skip_upload_screenshots:true,
+	)
+end
+
+lane :android_production_rollout do |options|
+  upload_to_play_store(
+      track: "production",          
+      rollout: options[:rollout],
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+end
+
+lane :android_production_halt do 
+    upload_to_play_store(
+        version_code:"10101",
+      track: "production",
+        release_status:"inProgress",
+      track_promote_to: "production",
+        track_promote_release_status: "draft",
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+end
+
+#---------- changelog
+
+lane :get_changelog_text do
+    ENV["CHANGELOG_TEXT"]
+end
+
+lane :generate_changelog_android do
+    version_code = get_version_code
+    changelog_text = get_changelog_text
+    Dir.glob("../fastlane/metadata/android/*").each do |folder|
+        changelog_dir = "#{folder}/changelogs/"
+        Dir.mkdir(changelog_dir) unless File.exists?(changelog_dir)
+        File.write("#{changelog_dir}#{version_code}.txt", changelog_text)
+    end
+end 
+
+#---------- message
+
+lane :round_rollout do |options|
+    r = options[:rollout]
+    r = r == r.to_i ? r.to_i : r
+    r
+end
+
+lane :get_text_to_messengers do |options|
+    version = get_version
+
+    final_rollout = options[:final_rollout].to_f * 100
+    final_rollout = round_rollout(rollout:final_rollout)
+    platform = options[:platform]
+    
+    result = "ℹ️  "
+    
+    if final_rollout == 100
+        result = "✅  "
+    end
+    
+    if final_rollout == 0
+        result = "🚫  "
+    end
+    
+    result += "#{version} #{platform} "
+        
+    if options[:start_rollout]
+        start_rollout = options[:start_rollout].to_f * 100
+        start_rollout = round_rollout(rollout: start_rollout)
+        result += "#{start_rollout}% -> "
+    end
+    
+    result += "#{final_rollout}% "
+    
+    if options[:release_notes]
+        result += "(#{options[:release_notes]})"
+    end
+    
+    result
+end
+
+#---------- git
+
+lane :merge_release do
+    if git_branch == ENV["MAIN_BRANCH_NAME"]
+        puts "🟥🐨🟥 Can't merge #{ENV["MAIN_BRANCH_NAME"]} with #{ENV["MAIN_BRANCH_NAME"]}"
+        next
+    end
+    
+    release_branch_name = git_branch
+    sh("git fetch")
+    sh("git checkout #{ENV["MAIN_BRANCH_NAME"]}")
+    sh("git pull origin #{ENV["MAIN_BRANCH_NAME"]}")
+    sh("git merge #{release_branch_name}")
+    push_to_git_remote
+end
+
+#---------- ios
+
+lane :ios_production do
+    build_ios()
+    build_xcode()
+    upload_ipa()
+#    set_changelog(
+#        app_identifier: ENV["IOS_PACKAGE_NAME"],
+#        username: ENV["FASTLANE_NAME"],
+#        team_name: ENV["IOS_TEAM_NAME"], 
+#        changelog: get_changelog_text()
+#    )
+end
+
+lane :update_phased_release do |options|
+  phased_release = options[:version].fetch_app_store_version_phased_release rescue nil
+
+  if options[:activate]
+    unless phased_release
+      options[:version].create_app_store_version_phased_release(attributes: {
+        phasedReleaseState: Spaceship::ConnectAPI::AppStoreVersionPhasedRelease::PhasedReleaseState::INACTIVE
+      })
+    end
+  else
+    if phased_release
+      phased_release.delete!
+    end
+  end
+end
+
+lane :ios_testflight do
+    build_ios()
+    build_xcode()
+    upload_ipa_to_testflight()
+end
+
+lane :upload_ipa_to_testflight do
+    ipa_path =  ENV["IOS_BUILD_LOCATION"] + get_build_name() + ".ipa"
+    
+    upload_to_testflight(
+        app_identifier: ENV["IOS_PACKAGE_NAME"],
+        skip_submission: true,
+        username: ENV["FASTLANE_NAME"],
+        team_name: ENV["IOS_TEAM_NAME"],
+        ipa: ipa_path
+    )
+end
+
+lane :upload_ipa do
+    ipa_path =  ENV["IOS_BUILD_LOCATION"] + get_build_name() + ".ipa"
+    
+    upload_to_app_store(
+        app_identifier: ENV["IOS_PACKAGE_NAME"],
+        username: ENV["FASTLANE_NAME"],
+        team_name: ENV["IOS_TEAM_NAME"],
+        ipa: ipa_path,
+        
+        skip_metadata: false,
+        metadata_path: ENV["IOS_EMPTY_METADATA_PATH"],
+        skip_screenshots: true,
+        
+        submit_for_review: true,
+        automatic_release: true,
+        phased_release: true,
+        reset_ratings: false,
+        
+        release_notes: {
+          'default' => get_changelog_text()
+        },
+        
+        submission_information: { 
+            add_id_info_uses_idfa: true 
+        }
+    )
+end
+
+lane :build_xcode do
+    build_path = ENV["IOS_BUILD_LOCATION"] + get_build_name() + "/"
+    
+    update_code_signing_settings(
+        path: build_path + "Unity-iPhone.xcodeproj",
+        targets: "Unity-iPhone",
+        use_automatic_signing: false
+    )
+    
+    import_certificate(
+        certificate_path: ENV["IOS_CERTIFICATE_PATH"],
+        certificate_password: ENV["IOS_CERTIFICATE_PASSWORD"],
+        keychain_name: ENV["IOS_KEYCHAIN_NAME"],
+        keychain_password: ENV["IOS_KEYCHAIN_PASSWORD"]     
+    )
+    
+    install_provisioning_profile(
+        path:ENV["IOS_PROVISION_PATH"]
+    )
+    
+    update_project_provisioning(
+        xcodeproj: build_path + "Unity-iPhone.xcodeproj",
+        profile: ENV["IOS_PROVISION_PATH"],
+        code_signing_identity: "iPhone Distribution",
+        target_filter: "Unity-iPhone$"
+    )
+    
+    update_project_team(
+        path: build_path + "Unity-iPhone.xcodeproj",
+        targets: "Unity-iPhone",
+        teamid: ENV["IOS_TEAM_ID"]
+    )
+    
+    build_ios_app(
+	    scheme: "Unity-iPhone",
+        workspace: build_path + "Unity-iPhone.xcworkspace",
+        clean: true,
+        skip_package_ipa: false,
+        build_path: ENV["IOS_BUILD_LOCATION"],
+        output_directory: ENV["IOS_BUILD_LOCATION"],
+        output_name: get_build_name(),
+        #include_bitcode: true,
+        xcargs: "ENABLE_BITCODE=NO"
+    )
+end
+
+lane :build_ios do
+    build_path = ENV["IOS_BUILD_LOCATION"]
+    pre_build
+    build_name = get_build_name
+    begin
+        unity(
+            build_target:"iOS",
+            unity_version: ENV["UNITY_VERSION"],
+            execute_method:"Build.iOS",
+            extra_args:"-build_location #{build_path} -build_name #{build_name}"
+        )
+    rescue => ex
+        post_build
+    end
+    post_build
+    cocoapods(
+        clean_install: true,
+        use_bundle_exec: false,
+        podfile: build_path + build_name + "/" + "Podfile"
+    )
+end
+
+#---------- unity script helper
+
+private_lane :pre_build do
+    copy_files(source: "./fastlane/Build.cs", destination:"./Assets/Scripts/")
+end
+
+private_lane :post_build do
+    remove_files(path:"./Assets/Scripts/Build.cs")
+end
