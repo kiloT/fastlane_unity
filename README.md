@@ -1,4 +1,5 @@
 
+
 # fastlane_unity
 
 There is a bunch of scripts for unity project auto build and upload to Google Play and App Store.
@@ -13,14 +14,39 @@ Befor project setup run commands below:
     brew install fastlane
     gem install dotenv
 
-Thewn go to the project folder and run commands below:
+Then go to the project folder and paste files from *fastlane_unity* repository.
 
-    fastlane init 
-    fastlane add_plugin unity
-    fastlane add_plugin file_manager
+Open *.env.default* in *fastlane* folder file and edit all empty fields. If you need only one platform feel free to skip another platform fields.
 
-Google Play release process:
+*release_notes* used only for generate text for notification on release process complete. 
+To change changelog text for stores change *CHANGELOG_TEXT* value in  *.env.default*.
 
+**Google Play release process:**
 
-App Store release process:
+*release_notes* used only for generate text for notification on release process complete.
 
+Start new release for 1%
+
+```bash
+fastlane android_release version:minor rollout:0.01 release_notes:"test"
+```
+
+Update rollout for 50%
+
+```bash
+fastlane android_update_rollout rollout:0.5 release_notes:"test"
+```
+
+Release rollout for all users (100%)
+
+```bash
+fastlane android_update_rollout rollout:1 release_notes:"test"
+```
+
+**App Store release process:**
+
+App Store release now support only phased, automatic on approve release:
+
+```bash
+fastlane ios_release release_notes:"test"
+```
