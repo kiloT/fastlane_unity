@@ -61,7 +61,7 @@ lane :android_release do |options|
     
     version = options[:version] || "minor"
         
-    increment_version(version:version)
+    set_version(version:version)
     push_version
     generate_changelog_android
     android_production(rollout:rollout)
@@ -142,10 +142,12 @@ lane :set_version do |options|
     pattern = /^[0-9]+.[0-9]+.[0-9]+$/
     
     if not version.match pattern
-        if version != "increment_major" && version != "increment_minor" && version != "increment_patch"
-            puts "🟥🐨🟥 Wrong version format. Should be \"XX.XX.XX\" or increment_major, increment_minor or increment_patch."
+        if version != "major" && version != "minor" && version != "patch"
+            puts "🟥🐨🟥 Wrong version format. Should be \"XX.XX.XX\" or major, minor or patch."
             next
         end
+
+	version = "increment_" + version
     end
     
     pre_build
@@ -156,17 +158,6 @@ lane :set_version do |options|
     )
     post_build
     puts "🟩🐨🟩 new version is " + get_version
-end
-
-lane :increment_version do |options|
-    version = options[:version]
-    
-    if version != "major" && version != "minor" && version != "patch"
-        puts "🟥🐨🟥 Wrong increment type. Should be major, minor or patch."
-        next
-    end
-    
-    set_version(version: "increment_" + version)
 end
 
 #---------- android
