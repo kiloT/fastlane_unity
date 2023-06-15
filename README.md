@@ -26,6 +26,7 @@ To change changelog text for stores change *CHANGELOG_TEXT* value in  *.env.defa
 *release_notes* used only for generate text for notification on release process complete.
 
 Start new release for 1%
+*version* possible values: major, minor, patch or AA.BB.CC(example 1.2.3 or 12.34.56 or 1.2.34)
 
 ```bash
 fastlane android_release version:minor rollout:0.01 release_notes:"test"
