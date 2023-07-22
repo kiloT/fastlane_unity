@@ -330,12 +330,6 @@ lane :ios_production do
     build_ios()
     build_xcode()
     upload_ipa()
-#    set_changelog(
-#        app_identifier: ENV["IOS_PACKAGE_NAME"],
-#        username: ENV["FASTLANE_NAME"],
-#        team_name: ENV["IOS_TEAM_NAME"], 
-#        changelog: get_changelog_text()
-#    )
 end
 
 lane :update_phased_release do |options|
@@ -385,18 +379,41 @@ lane :upload_ipa do
         metadata_path: ENV["IOS_EMPTY_METADATA_PATH"],
         skip_screenshots: true,
         
-        submit_for_review: true,
+        submit_for_review: false,
         automatic_release: true,
         phased_release: true,
         reset_ratings: false,
         
-        release_notes: {
-          'default' => get_changelog_text()
-        },
-        
         submission_information: { 
             add_id_info_uses_idfa: true 
-        }
+        },
+
+	force: true
+    )
+
+    set_changelog(
+        app_identifier: ENV["IOS_PACKAGE_NAME"],
+        username: ENV["FASTLANE_NAME"],
+        team_name: ENV["IOS_TEAM_NAME"], 
+        changelog: get_changelog_text()
+    )
+
+    upload_to_app_store(
+        app_identifier: ENV["IOS_PACKAGE_NAME"],
+        username: ENV["FASTLANE_NAME"],
+        team_name: ENV["IOS_TEAM_NAME"],
+
+	skip_metadata: true,
+	skip_screenshots: true,
+	skip_app_version_update: true,
+	skip_binary_upload: true,
+
+        submit_for_review: true,        
+	automatic_release: true,
+        phased_release: true,
+        reset_ratings: false,
+
+	force: true
     )
 end
 
