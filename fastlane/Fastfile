@@ -404,6 +404,7 @@ lane :upload_ipa do
         team_name: ENV["IOS_TEAM_NAME"],
 
 	skip_metadata: true,
+        metadata_path: ENV["IOS_EMPTY_METADATA_PATH"],
 	skip_screenshots: true,
 	skip_app_version_update: true,
 	skip_binary_upload: true,
