@@ -412,7 +412,11 @@ lane :upload_ipa do
         submit_for_review: true,        
 	automatic_release: true,
         phased_release: true,
-        reset_ratings: false,
+        reset_ratings: false,     
+   
+        submission_information: { 
+            add_id_info_uses_idfa: true 
+        },
 
 	force: true
     )
