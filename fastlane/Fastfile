@@ -152,6 +152,7 @@ lane :set_version do |options|
     
     pre_build
     unity(
+        build_target:"Android",
         unity_version: ENV["UNITY_VERSION"],
         execute_method:"Build.SetVersion",
         extra_args:"-custom_version #{version}"
