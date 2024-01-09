@@ -153,13 +153,30 @@ lane :set_version do |options|
     pre_build
     unity(
         build_target:"Android",
-        unity_version: ENV["UNITY_VERSION"],
+        unity_version: get_unity_version,
         execute_method:"Build.SetVersion",
         extra_args:"-custom_version #{version}"
     )
     post_build
     puts "🟩🐨🟩 new version is " + get_version
 end
+
+#---------- unity version
+
+lane :get_unity_version do
+    project_version = File.read("../ProjectSettings/ProjectVersion.txt")
+    pattern = /m_EditorVersion: *(\S+)/
+    founded = project_version.match(pattern)
+    
+    if not founded
+        puts "🟥🐨🟥 m_EditorVersion not founded in ProjectVersion.txt"
+        next
+    end
+
+    unity_version = founded[1]
+    unity_version
+end
+
 
 #---------- android
 
@@ -180,7 +197,7 @@ lane :build_android do |options|
     begin
         unity(
             build_target:"Android",
-            unity_version: ENV["UNITY_VERSION"],
+            unity_version: get_unity_version,
             execute_method:"Build.Android",
             extra_args:"-build_location #{build_location} -build_name #{build_name} -build_keystore_name #{ENV["ANDROID_BUILD_KEYSTORE_NAME"]} -build_keystore_password #{ENV["ANDROID_BUILD_KEYSTORE_PASSWORD"]} -build_keyalias_name #{ENV["ANDROID_BUILD_KEYALIAS_NAME"]} -build_keyalias_password #{ENV["ANDROID_BUILD_KEYALIAS_PASSWORD"]} -build_format #{build_format}"
         )
@@ -476,7 +493,7 @@ lane :build_ios do
     begin
         unity(
             build_target:"iOS",
-            unity_version: ENV["UNITY_VERSION"],
+            unity_version: get_unity_version,
             execute_method:"Build.iOS",
             extra_args:"-build_location #{build_path} -build_name #{build_name}"
         )
