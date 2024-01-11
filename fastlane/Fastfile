@@ -279,7 +279,7 @@ lane :generate_changelog_android do
     changelog_text = get_changelog_text
     Dir.glob("../fastlane/metadata/android/*").each do |folder|
         changelog_dir = "#{folder}/changelogs/"
-        Dir.mkdir(changelog_dir) unless File.exists?(changelog_dir)
+        Dir.mkdir(changelog_dir) unless File.exist?(changelog_dir)
         File.write("#{changelog_dir}#{version_code}.txt", changelog_text)
     end
 end 
