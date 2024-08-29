@@ -482,7 +482,7 @@ lane :build_xcode do
         output_directory: ENV["IOS_BUILD_LOCATION"],
         output_name: get_build_name(),
         #include_bitcode: true,
-        xcargs: "ENABLE_BITCODE=NO"
+        xcargs: ENV["IOS_BUILD_XCARGS"]
     )
 end
 
